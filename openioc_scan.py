@@ -41,7 +41,7 @@ from ioc_writer import ioc_api
 import colorama
 colorama.init()
 
-g_version = '2014/11/14'
+g_version = '2015/02/18'
 g_cache_path = ''
 g_detail_on = False
 g_color_term = colorama.Fore.MAGENTA
@@ -540,19 +540,12 @@ class ProcessItem(impscan.ImpScan, netscan.Netscan, malfind.Malfind, apihooks.Ap
         pprocess = obj.Object("_EPROCESS", offset = res[0], vm = self.flat_space)
         return self.util.check_string(str(pprocess.ImageFileName), content, condition, preserve_case)
 
-    def path(self, content, condition, preserve_case):
+    def cmdLine(self, content, condition, preserve_case):
         if not self.util.is_condition_string(condition):
-            debug.error('{0} condition is not supported in ProcessItem/path'.format(condition))
+            debug.error('{0} condition is not supported in ProcessItem/cmdLine'.format(condition))
             return False
-        path = self.fetchone_from_db_by_pid('hidden', 'path')
+        path = self.fetchone_from_db_by_pid('hidden', 'cmdLine')
         return self.util.check_string(path, content, condition, preserve_case)
-
-    def arguments(self, content, condition, preserve_case):
-        if not self.util.is_condition_string(condition):
-            debug.error('{0} condition is not supported in ProcessItem/arguments'.format(condition))
-            return False
-        arguments = self.fetchone_from_db_by_pid('hidden', 'arguments')
-        return self.util.check_string(arguments, content, condition, preserve_case)
 
     # based on malfind
     def extract_dllpaths(self):
@@ -1810,7 +1803,7 @@ class OpenIOC_Scan(psxview.PsXview, taskmods.DllList):
         self.cur.execute("create table if not exists impfunc(pid, iat, call, mod_name, func_name)")
         self.cur.execute("create table if not exists handles(pid, type, name)")
         self.cur.execute("create table if not exists netinfo(pid, protocol, laddr, lport, raddr, rport, state)")
-        self.cur.execute("create table if not exists hidden(pid unique, result, offset unique, path, arguments)")
+        self.cur.execute("create table if not exists hidden(pid unique, result, offset unique, cmdline)")
         self.cur.execute("create table if not exists dllpath(pid, path)")
         self.cur.execute("create table if not exists api_hooked(pid, mode, type, hooked_module, hooked_func)")
         self.cur.execute("create table if not exists privs(pid, priv)")
@@ -1919,11 +1912,11 @@ class OpenIOC_Scan(psxview.PsXview, taskmods.DllList):
                             if result == True and source[offset].ExitTime != 0:
                                 # I checked there were some dead processes without exit time, but I don't know other methods to judge them...
                                 result = False
-                            path, arguments = self.parse_cmdline(ep)
-                            records.append((ep.UniqueProcessId.v(), bool(result), offset, path, arguments))
+                            cmdline = ep.Peb.ProcessParameters.CommandLine.v() or ''
+                            records.append((ep.UniqueProcessId.v(), bool(result), offset, cmdline))
                             procs.append(ep)
                             pids.append(ep.UniqueProcessId)
-            self.cur.executemany("insert or ignore into hidden values (?, ?, ?, ?, ?)", records)
+            self.cur.executemany("insert or ignore into hidden values (?, ?, ?, ?)", records)
             debug.debug('{0} procs carved'.format(len(procs)))
         return procs
 
