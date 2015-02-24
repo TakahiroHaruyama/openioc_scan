@@ -41,7 +41,7 @@ from ioc_writer import ioc_api
 import colorama
 colorama.init()
 
-g_version = '2015/02/18'
+g_version = '2015/02/24'
 g_cache_path = ''
 g_detail_on = False
 g_color_term = colorama.Fore.MAGENTA
@@ -548,19 +548,36 @@ class ProcessItem(impscan.ImpScan, netscan.Netscan, malfind.Malfind, apihooks.Ap
         return self.util.check_string(path, content, condition, preserve_case)
 
     # based on malfind
-    def extract_dllpaths(self):
+    def extract_dllpaths(self, is_path=False, is_hidden=False):
         debug.info("[time-consuming task] extracting dllpaths from VADs... (pid={0})".format(self.process.UniqueProcessId))
 
-        mapped_files = []
+        inloadorder = dict((mod.DllBase.v(), mod)
+                            for mod in self.process.get_load_modules())
+        ininitorder = dict((mod.DllBase.v(), mod)
+                            for mod in self.process.get_init_modules())
+        inmemorder = dict((mod.DllBase.v(), mod)
+                            for mod in self.process.get_mem_modules())
+
+        mapped_files = {}
         for vad, address_space in self.process.get_vads(vad_filter = self.process._mapped_file_filter):
             if obj.Object("_IMAGE_DOS_HEADER", offset = vad.Start, vm = address_space).e_magic != 0x5A4D:
                 continue
-            mapped_files.append(str(vad.FileObject.FileName or 'none'))
+            mapped_files[int(vad.Start)] = str(vad.FileObject.FileName or '')
 
-        records = ((self.process.UniqueProcessId.v(), dllpath) for dllpath in mapped_files)
-        self.cur.executemany("insert or ignore into dllpath values (?, ?)", records)
+        records = []
+        for base in mapped_files.keys():
+            load_mod = inloadorder.get(base, None)
+            init_mod = ininitorder.get(base, None)
+            mem_mod = inmemorder.get(base, None)
+            result = (load_mod == None) and (init_mod == None) and (mem_mod == None)
+            records.append((self.process.UniqueProcessId.v(), mapped_files[base], result))
+
+        self.cur.executemany("insert or ignore into dllpath values (?, ?, ?)", records)
         self.update_done('dllpath')
-        return mapped_files
+        if is_path:
+            return [record[1] for record in records]
+        elif is_hidden:
+            return [record[2] for record in records]
 
     def DllPath(self, content, condition, preserve_case):
         if not self.util.is_condition_string(condition):
@@ -571,8 +588,31 @@ class ProcessItem(impscan.ImpScan, netscan.Netscan, malfind.Malfind, apihooks.Ap
         if int(done):
             dllpaths = self.fetchall_from_db_by_pid('dllpath', 'path')
         else:
-            dllpaths = self.extract_dllpaths()
+            dllpaths = self.extract_dllpaths(is_path=True)
         return self.util.check_strings(dllpaths, content, condition, preserve_case)
+
+    def DllHidden(self, content, condition, preserve_case):
+        if not self.util.is_condition_bool(condition):
+            debug.error('{0} condition is not supported in ProcessItem/DllHidden'.format(condition))
+            return False
+
+        (done,) = self.check_done('dllpath')
+        if int(done):
+            hiddens = self.fetchall_from_db_by_pid('dllpath', 'hidden')
+        else:
+            hiddens = self.extract_dllpaths(is_hidden=True)
+
+        if (True in hiddens and content.lower() == 'true') or (False not in hiddens and content.lower() == 'false'):
+            if g_detail_on:
+                sql = "select path from dllpath where pid = ? and hidden = ?"
+                self.cur.execute(sql, (self.process.UniqueProcessId.v(), content.lower() == 'true'))
+                records = self.cur.fetchall()
+                for (path,) in records:
+                    out = g_color_detail + str(path) + colorama.Fore.RESET
+                    print('matched IOC term detail: {0}'.format(out))
+            return True
+        else:
+            return False
 
     # based on handles
     def extract_handles(self, is_name=False, is_type=False):
@@ -756,7 +796,7 @@ class ProcessItem(impscan.ImpScan, netscan.Netscan, malfind.Malfind, apihooks.Ap
             return False
 
     # based on apihooks
-    def extract_hooked_APIs(self):
+    def extract_hooked_APIs(self, is_API=False, is_hookingMod=False):
         debug.info("[time-consuming task] extracting hooked APIs... (pid={0})".format(self.process.UniqueProcessId))
 
         process_space = self.process.get_process_address_space()
@@ -772,10 +812,13 @@ class ProcessItem(impscan.ImpScan, netscan.Netscan, malfind.Malfind, apihooks.Ap
             for hook in self.get_hooks(HOOK_MODE_USER, process_space, dll, module_group):
                 if self.whitelist(hook.hook_mode | hook.hook_type, self.process.ImageFileName.v(), hook.VictimModule, hook.HookModule, hook.Function):
                     continue
-                records.append((self.process.UniqueProcessId.v(), hook.Mode, hook.Type, str(dll.BaseDllName or ''), hook.Function))
-        self.cur.executemany("insert or ignore into api_hooked values (?, ?, ?, ?, ?)", records)
+                records.append((self.process.UniqueProcessId.v(), hook.Mode, hook.Type, str(dll.BaseDllName or ''), hook.Function, hook.HookModule))
+        self.cur.executemany("insert or ignore into api_hooked values (?, ?, ?, ?, ?, ?)", records)
         self.update_done('api_hooked')
-        return [record[4] for record in records]
+        if is_API:
+            return [record[4] for record in records]
+        elif is_hookingMod:
+            return [record[5] for record in records]
 
     def Hooked_API_FunctionName(self, content, condition, preserve_case):
         if not self.util.is_condition_string(condition):
@@ -786,8 +829,20 @@ class ProcessItem(impscan.ImpScan, netscan.Netscan, malfind.Malfind, apihooks.Ap
         if int(done):
             hooked_funcs = self.fetchall_from_db_by_pid('api_hooked', 'hooked_func')
         else:
-            hooked_funcs = self.extract_hooked_APIs()
+            hooked_funcs = self.extract_hooked_APIs(is_API=True)
         return self.util.check_strings(hooked_funcs, content, condition, preserve_case)
+
+    def Hooked_API_HookingModuleName(self, content, condition, preserve_case):
+        if not self.util.is_condition_string(condition):
+            debug.error('{0} condition is not supported in ProcessItem/Hooked/API/HookingModuleName'.format(condition))
+            return False
+
+        (done,) = self.check_done('api_hooked')
+        if int(done):
+            hooking_mods = self.fetchall_from_db_by_pid('api_hooked', 'hooking_module')
+        else:
+            hooking_mods = self.extract_hooked_APIs(is_hookingMod=True)
+        return self.util.check_strings(hooking_mods, content, condition, preserve_case)
 
     # based on privileges
     def extract_privileges(self):
@@ -1712,7 +1767,7 @@ class IOC_Scanner:
 
             self.walk_indicator(tlo, params)
             result += '++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n'
-            result += 'IOC definition short_desc="{0}" id={1}\n'.format(ioc_obj.metadata.findtext('.//short_description'), iocid)
+            result += 'IOC definition short_desc="{0}" desc="{1}" id={2}\n'.format(ioc_obj.metadata.findtext('.//short_description'), ioc_obj.metadata.findtext('.//description'), iocid)
             result += 'logic:\n{0}'.format(self.iocLogicString)
             self.iocLogicString=""
 
@@ -1804,8 +1859,8 @@ class OpenIOC_Scan(psxview.PsXview, taskmods.DllList):
         self.cur.execute("create table if not exists handles(pid, type, name)")
         self.cur.execute("create table if not exists netinfo(pid, protocol, laddr, lport, raddr, rport, state)")
         self.cur.execute("create table if not exists hidden(pid unique, result, offset unique, cmdline)")
-        self.cur.execute("create table if not exists dllpath(pid, path)")
-        self.cur.execute("create table if not exists api_hooked(pid, mode, type, hooked_module, hooked_func)")
+        self.cur.execute("create table if not exists dllpath(pid, path, hidden)")
+        self.cur.execute("create table if not exists api_hooked(pid, mode, type, hooked_module, hooked_func, hooking_module)")
         self.cur.execute("create table if not exists privs(pid, priv)")
 
         self.cur.execute("create table if not exists kernel_mods(offset unique, name, base, size, fullname)")
