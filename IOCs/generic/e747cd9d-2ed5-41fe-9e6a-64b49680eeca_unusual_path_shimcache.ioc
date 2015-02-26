@@ -1,8 +1,8 @@
 <?xml version='1.0' encoding='utf-8'?>
-<OpenIOC xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://openioc.org/schemas/OpenIOC_1.1" id="e747cd9d-2ed5-41fe-9e6a-64b49680eeca" last-modified="2014-11-12T07:00:54" published-date="0001-01-01T00:00:00">
+<OpenIOC xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://openioc.org/schemas/OpenIOC_1.1" id="e747cd9d-2ed5-41fe-9e6a-64b49680eeca" last-modified="2015-02-26T03:03:29" published-date="0001-01-01T00:00:00">
   <metadata>
     <short_description>suspicious paths (executed)</short_description>
-    <description>hoge</description>
+    <description>suspicious executable path extracted from ShimCache</description>
     <authored_by>Takahiro Haruyama</authored_by>
     <authored_date>2014-09-26T10:10:08Z</authored_date>
     <links/>

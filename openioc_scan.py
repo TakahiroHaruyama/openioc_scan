@@ -309,6 +309,25 @@ class ProcessItem(impscan.ImpScan, netscan.Netscan, malfind.Malfind, apihooks.Ap
         else:
             return False
 
+    def SectionList_MemorySection_InjectedHexPattern(self, content, condition, preserve_case):
+        if condition != 'matches':
+            debug.error('{0} condition is not supported in ProcessItem/SectionList/MemorySection/InjectedHexPattern'.format(condition))
+            return False
+
+        (done,) = self.check_done('injected')
+        if int(done):
+            starts = self.fetchall_from_db_by_pid('injected', 'start')
+        else:
+            starts = [start for (start, size) in self.detect_code_injections()]
+
+        pattern = self.util.make_regex(content, preserve_case)
+        addr_space = self.process.get_process_address_space()
+        for start in starts:
+            content = addr_space.zread(start, 64)
+            if pattern.search(content) is not None:
+                return True
+        return False
+
     def extract_strings(self):
         debug.info("[time-consuming task] extracting strings from VADs (pid={0})".format(self.process.UniqueProcessId))
         strings = []
@@ -1767,7 +1786,7 @@ class IOC_Scanner:
 
             self.walk_indicator(tlo, params)
             result += '++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n'
-            result += 'IOC definition short_desc="{0}" desc="{1}" id={2}\n'.format(ioc_obj.metadata.findtext('.//short_description'), ioc_obj.metadata.findtext('.//description'), iocid)
+            result += 'IOC definition \nshort_desc: {0} \ndesc: {1} \nid: {2}\n'.format(ioc_obj.metadata.findtext('.//short_description'), ioc_obj.metadata.findtext('.//description'), iocid)
             result += 'logic:\n{0}'.format(self.iocLogicString)
             self.iocLogicString=""
 

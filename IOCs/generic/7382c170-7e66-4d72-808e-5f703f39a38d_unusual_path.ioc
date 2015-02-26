@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
-<OpenIOC xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://openioc.org/schemas/OpenIOC_1.1" id="7382c170-7e66-4d72-808e-5f703f39a38d" last-modified="2014-11-12T07:00:54" published-date="0001-01-01T00:00:00">
+<OpenIOC xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://openioc.org/schemas/OpenIOC_1.1" id="7382c170-7e66-4d72-808e-5f703f39a38d" last-modified="2015-02-24T07:43:07" published-date="0001-01-01T00:00:00">
   <metadata>
     <short_description>suspicious paths (running)</short_description>
     <description>based on Iron man method: http://journeyintoir.blogspot.jp/2013/07/finding-malware-like-iron-man-slide.html</description>
@@ -10,31 +10,31 @@
     <Indicator operator="OR" id="2f8f9381-1c10-4962-9bff-4c748249a0fd">
       <Indicator operator="OR" id="362f84b0-2d42-4edb-bbe0-931c0c3369fb">
         <IndicatorItem id="2bb4416e-f0c1-468b-a68e-3339b9d828e5" condition="contains" preserve-case="false" negate="false">
-          <Context document="ProcessItem" search="ProcessItem/path" type="volatility"/>
+          <Context document="ProcessItem" search="ProcessItem/cmdLine" type="volatility"/>
           <Content type="string">\ProgramData</Content>
         </IndicatorItem>
         <IndicatorItem id="f891d621-beed-4667-bac5-c02d7d5ab3f0" condition="contains" preserve-case="false" negate="false">
-          <Context document="ProcessItem" search="ProcessItem/path" type="volatility"/>
+          <Context document="ProcessItem" search="ProcessItem/cmdLine" type="volatility"/>
           <Content type="string">\$Recycle.Bin</Content>
         </IndicatorItem>
         <IndicatorItem id="43d36e47-cb1b-49ac-8516-6cca256bf86d" condition="contains" preserve-case="false" negate="false">
-          <Context document="ProcessItem" search="ProcessItem/path" type="volatility"/>
+          <Context document="ProcessItem" search="ProcessItem/cmdLine" type="volatility"/>
           <Content type="string">\Windows\Temp</Content>
         </IndicatorItem>
         <IndicatorItem id="1934d332-53d4-4e6f-83cc-e1e90ebcefd8" condition="contains" preserve-case="false" negate="false">
-          <Context document="ProcessItem" search="ProcessItem/path" type="volatility"/>
+          <Context document="ProcessItem" search="ProcessItem/cmdLine" type="volatility"/>
           <Content type="string">\Users\All Users</Content>
         </IndicatorItem>
         <IndicatorItem id="c8a186d5-bbab-45df-bc94-7676dbcfbdc1" condition="contains" preserve-case="false" negate="false">
-          <Context document="ProcessItem" search="ProcessItem/path" type="volatility"/>
+          <Context document="ProcessItem" search="ProcessItem/cmdLine" type="volatility"/>
           <Content type="string">\Users\Default</Content>
         </IndicatorItem>
         <IndicatorItem id="028d8ee5-f356-4982-8d62-e82198aca925" condition="contains" preserve-case="false" negate="false">
-          <Context document="ProcessItem" search="ProcessItem/path" type="volatility"/>
+          <Context document="ProcessItem" search="ProcessItem/cmdLine" type="volatility"/>
           <Content type="string">\Users\Public</Content>
         </IndicatorItem>
         <IndicatorItem id="76d1903f-eef6-47d5-9449-4d9f674d83f2" condition="matches" preserve-case="false" negate="false">
-          <Context document="ProcessItem" search="ProcessItem/path" type="volatility"/>
+          <Context document="ProcessItem" search="ProcessItem/cmdLine" type="volatility"/>
           <Content type="string">\\Users\\.*\\AppData</Content>
         </IndicatorItem>
       </Indicator>
