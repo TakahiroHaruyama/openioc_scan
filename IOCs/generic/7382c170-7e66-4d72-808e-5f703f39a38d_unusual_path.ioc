@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
-<OpenIOC xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://openioc.org/schemas/OpenIOC_1.1" id="7382c170-7e66-4d72-808e-5f703f39a38d" last-modified="2015-02-24T07:43:07" published-date="0001-01-01T00:00:00">
+<OpenIOC xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://openioc.org/schemas/OpenIOC_1.1" id="7382c170-7e66-4d72-808e-5f703f39a38d" last-modified="2015-02-27T06:08:42" published-date="0001-01-01T00:00:00">
   <metadata>
     <short_description>suspicious paths (running)</short_description>
     <description>based on Iron man method: http://journeyintoir.blogspot.jp/2013/07/finding-malware-like-iron-man-slide.html</description>
@@ -69,7 +69,7 @@
         </IndicatorItem>
         <IndicatorItem id="13a850ec-b4b4-42ba-bc30-65a443a12308" condition="is" preserve-case="false" negate="false">
           <Context document="ProcessItem" search="ProcessItem/DllPath" type="volatility"/>
-          <Content type="string">none</Content>
+          <Content type="string"></Content>
         </IndicatorItem>
       </Indicator>
     </Indicator>
