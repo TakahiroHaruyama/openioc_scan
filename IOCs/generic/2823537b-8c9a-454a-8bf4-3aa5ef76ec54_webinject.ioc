@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
-<OpenIOC xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://openioc.org/schemas/OpenIOC_1.1" id="2823537b-8c9a-454a-8bf4-3aa5ef76ec54" last-modified="2015-02-26T02:58:09" published-date="0001-01-01T00:00:00">
+<OpenIOC xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://openioc.org/schemas/OpenIOC_1.1" id="2823537b-8c9a-454a-8bf4-3aa5ef76ec54" last-modified="2015-03-04T02:29:47" published-date="0001-01-01T00:00:00">
   <metadata>
     <short_description>Web Injection</short_description>
     <description>WebInjection malware (e.g., ZeuS, Citadel).</description>
@@ -29,5 +29,5 @@
       <IndicatorItem preserve-case="false" negate="false" id="3a4568dc-61e3-4993-8c48-c9cae0c8ea7f" condition="contains"><Context document="ProcessItem" search="ProcessItem/Hooked/API/HookingModuleName" type="volatility"/><Content type="string">unknown</Content></IndicatorItem></Indicator>
     </Indicator>
   </criteria>
-  <parameters/>
+  <parameters><param id="efb1e12a-c86e-40fd-8e7f-a143bbe0bd00" ref-id="d278f29b-d658-41d8-8aa1-656e1b54c693" name="score"><value type="string">40</value></param><param id="6a3fb40b-0951-4495-87dd-3175a1c490e1" ref-id="6b5c91a6-6e7b-4aed-9a99-b0de43bc46dd" name="score"><value type="string">40</value></param><param id="b6563b3d-ea5c-4ede-91df-6bffa7108b1e" ref-id="a9340d33-ac2d-4339-9d5e-20dc3c02b9c4" name="score"><value type="string">40</value></param><param id="92581385-a29b-46aa-93fc-67785526c45d" ref-id="f664600e-41e4-4420-b9e4-bb37accba122" name="score"><value type="string">40</value></param><param id="73a0dbf3-ad70-4b55-816b-e160ffe624b6" ref-id="3a4568dc-61e3-4993-8c48-c9cae0c8ea7f" name="score"><value type="string">20</value></param></parameters>
 </OpenIOC>
