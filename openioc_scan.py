@@ -444,7 +444,7 @@ class ProcessItem(impscan.ImpScan, netscan.Netscan, malfind.Malfind, apihooks.Ap
             call_dest = obj.Object("address", offset = next_addr,
                             vm = addr_space).v()
 
-            #if (not call_dest or call_dest < base_address or call_dest > base_address + data_len):
+            #if (not call_dest or call_dest < base_address or call_dest > base_address + data_len): <- original code miss the entries
             if (not call_dest or (call_dest > base_address and call_dest < base_address + data_len)):
                 debug.debug('continued {0:x}:{1:x}'.format(next_addr, call_dest))
                 threshold -= 1
