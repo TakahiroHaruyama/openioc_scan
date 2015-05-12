@@ -1074,21 +1074,34 @@ class DriverItem(impscan.ImpScan, devicetree.DriverIrp, callbacks.Callbacks, tim
     def get_data(self):
         base_address = self.kmod.DllBase
         size_to_read = self.kmod.SizeOfImage
+        data = ""
+        mod_filepath = os.path.join(g_cache_path, 'kmod_0x{0:x}'.format(self.kmod.DllBase)) + '.sys'
 
-        if not size_to_read:
-            pefile = obj.Object("_IMAGE_DOS_HEADER",
-                                offset = base_address,
-                                vm = self.kernel_space)
-            try:
-                nt_header = pefile.get_nt_header()
-                size_to_read = nt_header.OptionalHeader.SizeOfImage
-            except ValueError:
-                pass
+        if os.path.exists(mod_filepath):
+            with open(mod_filepath, 'rb') as f:
+                data = f.read()
+        else:
             if not size_to_read:
-                debug.warning('cannot get size info (kernel module name={0} base=0x{1:x})'.format(str(self.kmod.BaseDllName  or ''), self.kmod.DllBase))
-                return None, None, None
+                pefile = obj.Object("_IMAGE_DOS_HEADER",
+                                    offset = base_address,
+                                    vm = self.kernel_space)
+                try:
+                    nt_header = pefile.get_nt_header()
+                    size_to_read = nt_header.OptionalHeader.SizeOfImage
+                except ValueError:
+                    pass
+                if not size_to_read:
+                    debug.warning('cannot get size info (kernel module name={0} base=0x{1:x})'.format(str(self.kmod.BaseDllName  or ''), self.kmod.DllBase))
 
-        data = self.kernel_space.zread(base_address, size_to_read)
+            procs = list(tasks.pslist(self.kernel_space))
+            kernel_space = tasks.find_space(self.kernel_space, procs, base_address) # for some GUI drivers (e.g., win32k.sys)
+            if not kernel_space:
+                debug.warning('Cannot read supplied address (kernel module name={0} base=0x{1:x})'.format(str(self.kmod.BaseDllName  or ''), self.kmod.DllBase))
+            else:
+                data = kernel_space.zread(base_address, size_to_read)
+            with open(mod_filepath, 'wb') as f:
+                f.write(data)
+
         return base_address, size_to_read, data
 
     # based on impscan
@@ -1103,33 +1116,37 @@ class DriverItem(impscan.ImpScan, devicetree.DriverIrp, callbacks.Callbacks, tim
             imp_funcs = self.fetchall_from_db_by_base("kernel_mods_impfunc", "func_name")
         else:
             debug.info("[time-consuming task] extracting import functions... (kernel module name={0} base=0x{1:x})".format(str(self.kmod.BaseDllName  or ''), self.kmod.DllBase))
+            records = []
 
             all_mods = list(win32.modules.lsmod(self.kernel_space))
             base_address, size_to_read, data = self.get_data()
-            if data is None:
-                return False
 
-            apis = self.enum_apis(all_mods)
-            addr_space = self.kernel_space
+            if data != '':
+                apis = self.enum_apis(all_mods)
+                procs = list(tasks.pslist(self.kernel_space))
+                addr_space = tasks.find_space(self.kernel_space, procs, base_address) # for some GUI drivers (e.g., win32k.sys)
 
-            calls_imported = dict(
-                    (iat, call)
-                    for (_, iat, call) in self.call_scan(addr_space, base_address, data)
-                    if call in apis
-                    )
-            self._vicinity_scan(addr_space,
-                    calls_imported, apis, base_address, len(data),
-                    forward = True)
-            self._vicinity_scan(addr_space,
-                    calls_imported, apis, base_address, len(data),
-                    forward = False)
+                calls_imported = dict(
+                        (iat, call)
+                        for (_, iat, call) in self.call_scan(addr_space, base_address, data)
+                        if call in apis
+                        )
+                self._vicinity_scan(addr_space,
+                        calls_imported, apis, base_address, len(data),
+                        forward = True)
+                self._vicinity_scan(addr_space,
+                        calls_imported, apis, base_address, len(data),
+                        forward = False)
 
-            records = []
-            for iat, call in sorted(calls_imported.items()):
-                mod_name, func_name = self._original_import(str(apis[call][0].BaseDllName or ''), apis[call][1])
-                #records.append((self.kmod.DllBase.v(), iat, call, mod_name, func_name))
-                records.append((str(self.kmod.DllBase.v()), str(iat), str(call), mod_name, func_name))
-                imp_funcs.append(func_name)
+                for iat, call in sorted(calls_imported.items()):
+                    mod_name, func_name = self._original_import(str(apis[call][0].BaseDllName or ''), apis[call][1])
+                    #records.append((self.kmod.DllBase.v(), iat, call, mod_name, func_name))
+                    records.append((str(self.kmod.DllBase.v()), str(iat), str(call), mod_name, func_name))
+                    imp_funcs.append(func_name)
+
+            if len(records) == 0:
+                debug.info('inserting marker "done"... (kernel module name={0} base=0x{1:x})'.format(str(self.kmod.BaseDllName  or ''), self.kmod.DllBase))
+                records.append((str(self.kmod.DllBase.v()), 0, 0, 'marker_done', 'marker_done'))
             self.cur.executemany("insert or ignore into kernel_mods_impfunc values (?, ?, ?, ?, ?)", records)
 
         return self.util.check_strings(imp_funcs, content, condition, preserve_case)
@@ -1139,23 +1156,27 @@ class DriverItem(impscan.ImpScan, devicetree.DriverIrp, callbacks.Callbacks, tim
             debug.error('{0} condition is not supported in DriverItem/StringList/string'.format(condition))
             return False
 
-        base_address, size_to_read, data = self.get_data()
-        if data is None:
-            return False
         count = self.fetchone_from_db_by_base("kernel_mods_strings", "count(*)")
+        strings = []
+        records = []
         if count > 0:
             strings = self.fetchall_from_db_by_base("kernel_mods_strings", "string")
         else:
             debug.info("[time-consuming task] extracting strings... (kernel module name={0} base=0x{1:x})".format(str(self.kmod.BaseDllName  or ''), self.kmod.DllBase))
-            strings = list(set(self.util.extract_unicode(data) + self.util.extract_ascii(data)))
-            #records = ((self.kmod.DllBase.v(), string) for string in strings)
-            records = ((str(self.kmod.DllBase.v()), string) for string in strings)
+            base_address, size_to_read, data = self.get_data()
+            if data != '':
+                strings = list(set(self.util.extract_unicode(data) + self.util.extract_ascii(data)))
+                records = [(str(self.kmod.DllBase.v()), string) for string in strings]
+            if len(records) == 0:
+                debug.info('inserting marker "done"... (kernel module name={0} base=0x{1:x})'.format(str(self.kmod.BaseDllName  or ''), self.kmod.DllBase))
+                records.append((str(self.kmod.DllBase.v()), 'marker_done'))
             self.cur.executemany("insert or ignore into kernel_mods_strings values (?, ?)", records)
 
         result = self.util.check_strings(strings, content, condition, preserve_case)
         if result == False and condition == 'matches': # for searching binary sequences
             pattern = self.util.make_regex(content, preserve_case)
-            if pattern.search(data) is not None:
+            base_address, size_to_read, data = self.get_data()
+            if data != '' and pattern.search(data) is not None:
                 result = True
 
         return result
@@ -1678,14 +1699,19 @@ class IOC_Scanner:
                 self.walk_indicator(chn, params)
 
                 self.level-=1
-                #logicOperator = str(node.getparent().get("operator")).lower()
                 logicOperator = str(chn.getparent().get("operator")).lower()
-                #if logicOperator == 'none': # maybe top
-                #    logicOperator = 'or'
                 if chn == node.getchildren()[-1]:
                     self.iocLogicString += '  '*self.level + ')\n'
                     self.iocEvalString += ' )'
                 else:
+                    '''
+                    theid = chn.getparent().get('id')
+                    print theid
+                    for refid, name, value in params:
+                        if theid == refid:
+                            if name == 'note':
+                                logicOperator += '(note="{0}")'.format(value)
+                    '''
                     self.iocLogicString += '  '*self.level + ')\n' + '  '*self.level + str(logicOperator) + '\n'
                     self.iocEvalString += ' )' + ' ' + str(logicOperator)
 
@@ -1870,6 +1896,7 @@ class OpenIOC_Scan(psxview.PsXview, taskmods.DllList):
         self.cur.execute("create table if not exists version(version unique)")
         self.cur.execute("insert into version values(?)", (g_version,))
 
+        self.cur.execute("create table if not exists hidden(pid unique, result, offset unique, cmdline)")
         self.cur.execute("create table if not exists done(pid unique, injected, strings, vaddump, impfunc, handles, netinfo, dllpath, api_hooked, privs)")
         self.cur.execute("create table if not exists injected(pid, start, size)")
         self.cur.execute("create table if not exists strings(pid, string)")
@@ -1877,7 +1904,6 @@ class OpenIOC_Scan(psxview.PsXview, taskmods.DllList):
         self.cur.execute("create table if not exists impfunc(pid, iat, call, mod_name, func_name)")
         self.cur.execute("create table if not exists handles(pid, type, name)")
         self.cur.execute("create table if not exists netinfo(pid, protocol, laddr, lport, raddr, rport, state)")
-        self.cur.execute("create table if not exists hidden(pid unique, result, offset unique, cmdline)")
         self.cur.execute("create table if not exists dllpath(pid, path, hidden)")
         self.cur.execute("create table if not exists api_hooked(pid, mode, type, hooked_module, hooked_func, hooking_module)")
         self.cur.execute("create table if not exists privs(pid, priv)")
