@@ -912,6 +912,9 @@ class RegistryItem(hivelist.HiveList, shimcache.ShimCache):
                 self.reg_path_list.append('{0}'.format(keypath + "\\" + key.Name + "\\" + v.Name))
 
     def Path(self, content, condition, preserve_case):
+        debug.error('RegistryItem/Path is currently disabled because it takes toooo long time :-(')
+        return False
+        '''
         if not self.util.is_condition_string(condition):
             debug.error('{0} condition is not supported in RegistryItem/Path'.format(condition))
             return False
@@ -935,6 +938,7 @@ class RegistryItem(hivelist.HiveList, shimcache.ShimCache):
             paths = list(set(self.reg_path_list))
             self.cur.executemany("insert or ignore into regpath values (?)", [(path, ) for path in paths])
         return self.util.check_strings(paths, content, condition, preserve_case)
+        '''
 
     def ShimCache_ExecutablePath(self, content, condition, preserve_case):
         if not self.util.is_condition_string(condition):
@@ -951,6 +955,8 @@ class RegistryItem(hivelist.HiveList, shimcache.ShimCache):
             for path, modified, updated in shimcache.ShimCache.calculate(self):
                 path_str ='{0}'.format(path)
                 records.append((path_str, modified.v()))
+            if len(records) == 0:
+                records.append(('dummy', 'dummy')) # insert dummy for done
             self.cur.executemany("insert or ignore into shimcache values (?, ?)", records)
             paths = [record[0] for record in records]
         return self.util.check_strings(paths, content, condition, preserve_case)
