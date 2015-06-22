@@ -280,7 +280,10 @@ class ProcessItem(impscan.ImpScan, netscan.Netscan, malfind.Malfind, apihooks.Ap
         debug.debug("{0} already done. Results reused (pid={1})".format(table, self.process.UniqueProcessId))
         sql = "select {0} from {1} where pid = ?".format(column, table)
         self.cur.execute(sql, (self.process.UniqueProcessId.v(),))
-        return self.cur.fetchone()[0]
+        record = self.cur.fetchone()
+        if record is None: # for cmdLine
+            return ''
+        return record[0]
 
     def detect_code_injections(self):
         injected = []
