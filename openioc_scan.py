@@ -326,7 +326,7 @@ class ProcessItem(impscan.ImpScan, netscan.Netscan, malfind.Malfind, apihooks.Ap
         pattern = self.util.make_regex(content, preserve_case)
         addr_space = self.process.get_process_address_space()
         for start in starts:
-            content = addr_space.zread(start, 64)
+            content = addr_space.zread(start, 256)
             if pattern.search(content) is not None:
                 return True
         return False
