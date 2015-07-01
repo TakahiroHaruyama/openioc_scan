@@ -1855,6 +1855,9 @@ class OpenIOC_Scan(psxview.PsXview, taskmods.DllList):
         self._config.add_option('test', short_option = 't', default = False,
                                help = 'display all scan results for improving IOC',
                                action = 'store_true')
+        self._config.add_option('erase', short_option = 'e', default = False,
+                               help = 'erase cached db before scan',
+                               action = 'store_true')
         self.db = None
         self.cur = None
         self.total_secs = 0
@@ -1871,10 +1874,11 @@ class OpenIOC_Scan(psxview.PsXview, taskmods.DllList):
         return [t for t in tasks if t.UniqueProcessId in pidlist]
 
     def clear_tables(self):
-        debug.info("Loaded DB version is different from that of the script. Clearing the tables...")
+        debug.info("Clearing the tables... (old DB or erase flag)")
 
         self.cur.execute("drop table if exists version")
 
+        self.cur.execute("drop table if exists hidden")
         self.cur.execute("drop table if exists done")
         self.cur.execute("drop table if exists injected")
         self.cur.execute("drop table if exists strings")
@@ -1882,7 +1886,6 @@ class OpenIOC_Scan(psxview.PsXview, taskmods.DllList):
         self.cur.execute("drop table if exists impfunc")
         self.cur.execute("drop table if exists handles")
         self.cur.execute("drop table if exists netinfo")
-        self.cur.execute("drop table if exists hidden")
         self.cur.execute("drop table if exists dllpath")
         self.cur.execute("drop table if exists api_hooked")
         self.cur.execute("drop table if exists privs")
@@ -1898,6 +1901,7 @@ class OpenIOC_Scan(psxview.PsXview, taskmods.DllList):
         self.cur.execute("drop table if exists shimcache")
         self.cur.execute("drop table if exists service")
         self.cur.execute("drop table if exists ssdt_hooked")
+        self.cur.execute("drop table if exists files")
 
     def make_tables(self):
         debug.info("Making new DB tables...")
@@ -1930,7 +1934,7 @@ class OpenIOC_Scan(psxview.PsXview, taskmods.DllList):
         self.cur.execute("create table if not exists ssdt_hooked(table_idx, entry_idx, syscall_ptr, syscall_name, hooking_mod_name, inline_hooked)")
         self.cur.execute("create table if not exists files(offset, inode, name, extension, path, size)")
 
-    def init_db(self):
+    def init_db(self, f_erase):
         global g_cache_path
         image_url = self._config.opts["location"]
         image_path = urllib.url2pathname(image_url.split('///')[1])
@@ -1951,11 +1955,11 @@ class OpenIOC_Scan(psxview.PsXview, taskmods.DllList):
         else:
             self.cur.execute("select * from version")
             db_version = self.cur.fetchone()[0]
-            if db_version == g_version:
-                debug.info("Results in existing database loaded")
-            else:
+            if db_version != g_version or f_erase:
                 self.clear_tables()
                 self.make_tables()
+            else:
+                debug.info("Results in existing database loaded")
 
     def parse_cmdline(self, process):
         debug.debug(process.ImageFileName)
@@ -2074,12 +2078,15 @@ class OpenIOC_Scan(psxview.PsXview, taskmods.DllList):
             definitions = scanner.display()
             yield definitions
         else:
-            self.init_db()
+            self.init_db(self._config.erase)
             scanner.prepare(self.cur, self._config)
             procs = [None]
             kmods = [None]
             if scanner.with_item_all('Process'):
-                procs = self.extract_all_active_procs()
+                with Timer() as t:
+                    procs = self.extract_all_active_procs()
+                debug.debug("=> elapsed scan: {0}s for process carving".format(t.secs))
+                self.total_secs += t.secs
                 #print procs
                 # pre-generated process entries in db for all updated tasks (e.g., netinfo)
                 for process in self.filter_tasks(procs):
