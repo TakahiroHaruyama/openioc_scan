@@ -1856,7 +1856,10 @@ class OpenIOC_Scan(psxview.PsXview, taskmods.DllList):
                                help = 'display all scan results for improving IOC',
                                action = 'store_true')
         self._config.add_option('erase', short_option = 'e', default = False,
-                               help = 'erase cached db before scan',
+                               help = 'erase cached db then scan',
+                               action = 'store_true')
+        self._config.add_option('not_carve', short_option = 'n', default = False,
+                               help = 'not carve _EPROCESS object (fetch from linked list)',
                                action = 'store_true')
         self.db = None
         self.cur = None
@@ -1979,7 +1982,7 @@ class OpenIOC_Scan(psxview.PsXview, taskmods.DllList):
         return 'none', 'none'
 
     # based on psxview
-    def extract_all_active_procs(self):
+    def extract_all_active_procs(self, not_carve):
         kernel_space = utils.load_as(self._config)
         flat_space = utils.load_as(self._config, astype = 'physical')
         self.cur.execute("select count(*) from hidden")
@@ -1997,38 +2000,51 @@ class OpenIOC_Scan(psxview.PsXview, taskmods.DllList):
             #return [obj.Object("_EPROCESS", offset = record[0], vm = flat_space) for record in self.cur.fetchall()]
             #return [obj.Object("_EPROCESS", offset = record[0], vm = kernel_space) for record in self.cur.fetchall()]
         else:
-            debug.info("[time-consuming task] extracting all processes including hidden/dead ones...")
-            all_tasks = list(tasks.pslist(kernel_space))
-            ps_sources = {}
-            ps_sources['pslist'] = self.check_pslist(all_tasks)
-            ps_sources['psscan'] = self.check_psscan()
-            #ps_sources['thrdproc'] = self.check_thrdproc(kernel_space)
-            ps_sources['pspcid'] = self.check_pspcid(kernel_space)
-
-            seen_offsets = []
             records = []
             procs = []
-            pids = []
-            for source in ps_sources.values():
-                for offset in source.keys():
-                    if offset not in seen_offsets:
-                        seen_offsets.append(offset)
-                        #if source[offset].ExitTime != 0: # exclude dead process even if it is included in process list
-                        #if (source[offset].ExitTime != 0) and (not ps_sources['pslist'].has_key(offset)): # exclude dead process not included in process list <- cannot resolve from ethread!
-                        #    continue
-                        if isinstance(self.virtual_process_from_physical_offset(kernel_space, offset), obj.NoneObject):
-                            ep = obj.Object("_EPROCESS", offset = offset, vm = flat_space)
-                        else:
-                            ep = self.virtual_process_from_physical_offset(kernel_space, offset)
-                        if source[offset].UniqueProcessId not in pids: # cross view in crashdump file seems to be buggy (duplicated processes) :-(
-                            result = not (ps_sources['pslist'].has_key(offset) and ps_sources['psscan'].has_key(offset) and ps_sources['pspcid'].has_key(offset))
-                            if result == True and source[offset].ExitTime != 0:
-                                # I checked there were some dead processes without exit time, but I don't know other methods to judge them...
-                                result = False
-                            cmdline = ep.Peb.ProcessParameters.CommandLine.v() or ''
-                            records.append((ep.UniqueProcessId.v(), bool(result), offset, cmdline))
-                            procs.append(ep)
-                            pids.append(ep.UniqueProcessId)
+            if not_carve:
+                debug.info('getting processes from linked list... (-n option enabled)')
+                procs = list(tasks.pslist(kernel_space))
+                for proc in procs:
+                    cmdline = proc.Peb.ProcessParameters.CommandLine.v() or ''
+                    offset = kernel_space.vtop(proc.obj_offset)
+                    records.append((proc.UniqueProcessId.v(), False, offset, cmdline))
+            else:
+                debug.info("[time-consuming task] extracting all processes including hidden/dead ones...")
+                all_tasks = list(tasks.pslist(kernel_space))
+                ps_sources = {}
+                ps_sources['pslist'] = self.check_pslist(all_tasks)
+                ps_sources['psscan'] = self.check_psscan()
+                #ps_sources['thrdproc'] = self.check_thrdproc(kernel_space)
+                ps_sources['pspcid'] = self.check_pspcid(kernel_space)
+
+                seen_offsets = []
+                pids = []
+                for source in ps_sources.values():
+                    for offset in source.keys():
+                        if offset not in seen_offsets:
+                            seen_offsets.append(offset)
+                            #if source[offset].ExitTime != 0: # exclude dead process even if it is included in process list
+                            #if (source[offset].ExitTime != 0) and (not ps_sources['pslist'].has_key(offset)): # exclude dead process not included in process list <- cannot resolve from ethread!
+                            #    continue
+                            if isinstance(self.virtual_process_from_physical_offset(kernel_space, offset), obj.NoneObject):
+                                ep = obj.Object("_EPROCESS", offset = offset, vm = flat_space)
+                            else:
+                                ep = self.virtual_process_from_physical_offset(kernel_space, offset)
+                            if source[offset].UniqueProcessId not in pids: # cross view in crashdump file seems to be buggy (duplicated processes) :-(
+                                result = not (ps_sources['pslist'].has_key(offset) and ps_sources['psscan'].has_key(offset) and ps_sources['pspcid'].has_key(offset))
+                                if result == True and source[offset].ExitTime != 0:
+                                    # I checked there were some dead processes without exit time, but I don't know other methods to judge them...
+                                    result = False
+                                cmdline = ep.Peb.ProcessParameters.CommandLine.v() or ''
+                                if isinstance(ep.UniqueProcessId.v(), obj.NoneObject):
+                                    debug.warning('skipping NoneObject from flat_space')
+                                    continue
+                                #pid = 0 if isinstance(ep.UniqueProcessId.v(), obj.NoneObject) else ep.UniqueProcessId.v()
+                                records.append((ep.UniqueProcessId.v(), bool(result), offset, cmdline))
+                                procs.append(ep)
+                                pids.append(ep.UniqueProcessId)
+
             self.cur.executemany("insert or ignore into hidden values (?, ?, ?, ?)", records)
             debug.debug('{0} procs carved'.format(len(procs)))
         return procs
@@ -2084,12 +2100,13 @@ class OpenIOC_Scan(psxview.PsXview, taskmods.DllList):
             kmods = [None]
             if scanner.with_item_all('Process'):
                 with Timer() as t:
-                    procs = self.extract_all_active_procs()
+                    procs = self.extract_all_active_procs(self._config.not_carve)
                 debug.debug("=> elapsed scan: {0}s for process carving".format(t.secs))
                 self.total_secs += t.secs
                 #print procs
                 # pre-generated process entries in db for all updated tasks (e.g., netinfo)
                 for process in self.filter_tasks(procs):
+                    #pid = 0 if isinstance(process.UniqueProcessId.v(), obj.NoneObject) else process.UniqueProcessId.v()
                     self.cur.execute("insert or ignore into done values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (process.UniqueProcessId.v(), False, False, False, False, False, False, False, False, False))
             if scanner.with_item_all('Driver'):
                 kmods = self.extract_all_loaded_kernel_mods()
