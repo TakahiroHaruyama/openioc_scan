@@ -670,7 +670,12 @@ class ProcessItem(impscan.ImpScan, netscan.Netscan, malfind.Malfind, apihooks.Ap
                 handle_list.append((int(pid), object_type, name))
 
             records = list(set(handle_list))
-            self.cur.executemany("insert or ignore into handles values (?, ?, ?)", records)
+            for record in records:
+                #print record
+                pid, object_type, name = record
+                #self.cur.execute("insert or ignore into handles values (?, ?, ?)", (pid, object_type, name.decode('utf8')))
+                self.cur.execute("insert or ignore into handles values (?, ?, ?)", (pid, object_type, unicode(name))) # all executemany should be explicitly converted to unicode?
+            #self.cur.executemany("insert or ignore into handles values (?, ?, ?)", records)
 
             self.update_done('handles')
             if is_name:
