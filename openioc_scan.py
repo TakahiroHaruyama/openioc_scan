@@ -1289,7 +1289,11 @@ class DriverItem(impscan.ImpScan, devicetree.DriverIrp, callbacks.Callbacks, tim
                 signaled = "-"
             due_time = "{0:#010x}:{1:#010x}".format(timer.DueTime.HighPart, timer.DueTime.LowPart)
             #records.append((module.DllBase.v(), timer.obj_offset, due_time, timer.Period.v(), signaled, timer.Dpc.DeferredRoutine.v()))
-            records.append((str(module.DllBase.v()), str(timer.obj_offset), due_time, timer.Period.v(), signaled, str(timer.Dpc.DeferredRoutine.v())))
+#Quickfix for module=None
+	    if module is None:
+            	records.append(('None', str(timer.obj_offset), due_time, timer.Period.v(), signaled, str(timer.Dpc.DeferredRoutine.v())))
+            else:
+            	records.append((str(module.DllBase.v()), str(timer.obj_offset), due_time, timer.Period.v(), signaled, str(timer.Dpc.DeferredRoutine.v())))
 
         if len(records) == 0:
             records.append(('dummy', 'dummy', 'dummy', 'dummy', 'dummy', 'dummy')) # insert dummy for done
@@ -1419,6 +1423,7 @@ class FileItem(mftparser.MFTParser):
             for a, i in attributes:
                 size = -1
                 if a.startswith("FILE_NAME"):
+		    debug.debug(a)
                     if hasattr(i, "ParentDirectory"):
                         name = mft_entry.remove_unprintable(i.get_name()) or "(Null)"
                         if len(name.split('.')) > 1:
@@ -1428,8 +1433,8 @@ class FileItem(mftparser.MFTParser):
                         full = mft_entry.get_full_path(i)
                         #size = int(i.RealFileSize)
                         size = str(i.RealFileSize.v())
-                        debug.debug('NTFS file info from MFT entry $FN: name={0}, ext={1}, full={2}'.format(name, ext, full))
-                        records.append((offset, mft_entry.RecordNumber.v(), name, ext, full, size))
+                        #records.append((offset, mft_entry.RecordNumber.v(), name, ext, full, size))
+                        records.append((offset, mft_entry.RecordNumber.v(), unicode(name), unicode(ext), unicode(full), unicode(size)))
 
         if len(records) == 0:
             records.append((0, 0, 'dummy', 'dummy', 'dummy', 0)) # insert dummy for done
