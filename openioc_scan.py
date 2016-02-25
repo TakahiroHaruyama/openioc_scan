@@ -1433,6 +1433,7 @@ class FileItem(mftparser.MFTParser):
                         full = mft_entry.get_full_path(i)
                         #size = int(i.RealFileSize)
                         size = str(i.RealFileSize.v())
+                        debug.debug('NTFS file info from MFT entry $FN: name={0}, ext={1}, full={2}'.format(name, ext, full))
                         #records.append((offset, mft_entry.RecordNumber.v(), name, ext, full, size))
                         records.append((offset, mft_entry.RecordNumber.v(), unicode(name), unicode(ext), unicode(full), unicode(size)))
 
